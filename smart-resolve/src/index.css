@@ -417,21 +417,28 @@ input, select, textarea { font-family: var(--font); }
   background: white;
   border-radius: 16px;
   padding: 0;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 1px rgba(0, 0, 0, 0.1);
   border: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.login-curved-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.25), 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
 .login-header-section {
   background: linear-gradient(135deg, #2da870 0%, #25956a 100%);
   border-radius: 16px 16px 0 0;
-  padding: 32px 28px;
+  padding: 40px 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(45, 168, 112, 0.15);
 }
 
 .login-logo-group {
@@ -450,8 +457,10 @@ input, select, textarea { font-family: var(--font); }
   font-size: 26px;
   font-weight: 800;
   color: white;
-  background: rgba(255, 255, 255, 0.2);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 1px 3px rgba(255, 255, 255, 0.3), 0 4px 8px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
 }
 
 .login-logo-text h1 {
@@ -472,52 +481,60 @@ input, select, textarea { font-family: var(--font); }
 }
 
 .login-form-wrapper {
-  padding: 32px 28px;
+  padding: 36px 32px 40px;
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: white;
+  background: #fafbfc;
 }
 
 .login-title {
-  font-size: 28px;
-  font-weight: 800;
-  color: #333;
-  margin: 0 0 24px;
+  font-size: 32px;
+  font-weight: 900;
+  color: #1a1a1a;
+  margin: 0 0 28px;
   text-align: center;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.8px;
+  background: linear-gradient(135deg, #1a1a1a 0%, #333 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .login-tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-  border-bottom: 2px solid #e0e0e0;
+  gap: 0;
+  margin-bottom: 28px;
+  border-bottom: 2px solid #f0f0f0;
 }
 
 .login-tab {
   flex: 1;
-  padding: 12px 16px;
+  padding: 14px 16px;
   border: none;
   background: transparent;
-  color: #999;
-  font-size: 14px;
-  font-weight: 600;
+  color: #bbb;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.25s ease;
-  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+  border-bottom: 4px solid transparent;
   margin-bottom: -2px;
   text-transform: uppercase;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.5px;
+  position: relative;
 }
 
 .login-tab:hover {
-  color: #666;
+  color: #999;
+  background: rgba(45, 168, 112, 0.02);
 }
 
 .login-tab.active {
   color: #2da870;
   border-bottom-color: #2da870;
+  background: rgba(45, 168, 112, 0.05);
+  font-weight: 800;
 }
 
 .login-form {
@@ -536,30 +553,33 @@ input, select, textarea { font-family: var(--font); }
 }
 
 .login-form .form-row input {
-  padding: 12px 14px;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
+  padding: 13px 15px;
+  border: 2px solid #e8e8e8;
+  border-radius: 10px;
   font-size: 13px;
   background: white;
   color: #333;
-  transition: all 0.25s ease;
+  transition: all 0.3s ease;
   font-family: var(--font);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 .login-form .form-row input:hover {
-  border-color: #d0d0d0;
+  border-color: #d8d8d8;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06);
 }
 
 .login-form .form-row input::placeholder {
-  color: #999;
+  color: #aaa;
   font-size: 13px;
+  font-weight: 500;
 }
 
 .login-form .form-row input:focus {
   outline: none;
   border-color: #2da870;
-  background: white;
-  box-shadow: 0 0 0 3px rgba(45, 168, 112, 0.1);
+  background: #f9fffc;
+  box-shadow: 0 0 0 4px rgba(45, 168, 112, 0.12), 0 4px 12px rgba(45, 168, 112, 0.15);
 }
 
 .login-error {
@@ -577,22 +597,39 @@ input, select, textarea { font-family: var(--font); }
   background: linear-gradient(135deg, #2da870 0%, #25956a 100%);
   color: white;
   border: none;
-  padding: 12px 18px;
-  border-radius: 8px;
+  padding: 14px 20px;
+  border-radius: 10px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
-  transition: all 0.25s ease;
-  box-shadow: 0 2px 6px rgba(45, 168, 112, 0.2);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 14px rgba(45, 168, 112, 0.25), 0 0 1px rgba(0, 0, 0, 0.1);
   font-family: var(--font);
-  letter-spacing: 0.3px;
-  margin-top: 6px;
+  letter-spacing: 0.4px;
+  margin-top: 8px;
   text-transform: uppercase;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-submit-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.15);
+  transition: left 0.3s ease;
 }
 
 .login-submit-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(45, 168, 112, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(45, 168, 112, 0.35), 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.login-submit-btn:hover::before {
+  left: 100%;
 }
 
 .login-submit-btn:active {
@@ -602,33 +639,35 @@ input, select, textarea { font-family: var(--font); }
 .login-forgot {
   text-align: center;
   font-size: 12px;
-  color: #666;
+  color: #888;
   font-weight: 600;
   cursor: pointer;
-  margin: 16px 0 0;
-  transition: all 0.25s ease;
+  margin: 18px 0 0;
+  transition: all 0.3s ease;
   letter-spacing: 0.2px;
-  padding: 8px 0;
+  padding: 10px 0;
 }
 
 .login-forgot:hover {
   color: #2da870;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
 }
 
 .login-footer {
   text-align: center;
-  font-size: 10px;
+  font-size: 11px;
   color: #999;
   font-weight: 500;
-  margin: 20px 0 0;
-  padding-top: 14px;
-  border-top: 1px solid #e0e0e0;
-  letter-spacing: 0.2px;
+  margin: 24px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid #e8e8e8;
+  letter-spacing: 0.3px;
 }
 
 .login-footer strong {
-  color: #333;
+  color: #2da870;
   font-weight: 700;
 }
 

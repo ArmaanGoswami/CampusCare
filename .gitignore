@@ -1,3 +1,6 @@
 node_modules/ 
 dist/ 
 build/ 
+
+smart-resolve/backend/credentials.json
+smart-resolve/backend/__pycache__/
