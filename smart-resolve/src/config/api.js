@@ -9,8 +9,12 @@ const detectApiBase = () => {
     return trimTrailingSlash(fromEnv.trim());
   }
 
-  // Always return the live Render backend URL
-  return 'https://campuscare-v2ca.onrender.com';
+  // Android emulator maps host machine localhost to 10.0.2.2.
+  if (Capacitor.isNativePlatform()) {
+    return 'http://10.0.2.2:5000';
+  }
+
+  return 'http://localhost:5000';
 };
 
 export const API_BASE_URL = detectApiBase();

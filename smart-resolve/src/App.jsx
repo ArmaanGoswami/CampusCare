@@ -1,11 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import AdminDashboard from './AdminDashboard';
+import AnalyticsDashboard from './AnalyticsDashboard';
 import ReportIssue from './ReportIssue';
 import IssueTracker from './IssueTracker';
 import LoginPage from './LoginPage';
+import { apiUrl } from './config/api';
 
-const STORAGE_KEY = 'smart-resolve-issues-v1';
+const STORAGE_KEY = 'smart-resolve-issues-v2';
 const DEFAULT_REPORTER = 'Armaan';
+
+// Clear all storage keys on app load to start fresh
+if (typeof window !== 'undefined') {
+  localStorage.removeItem('smart-resolve-issues-v1');
+  localStorage.removeItem('smart-resolve-issues');
+  localStorage.removeItem('smart-resolve-issues-v2');
+}
+
+const normalizeReporterName = (value) => (value || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase();
 
 const mergeIssuesById = (baseIssues, incomingIssues) => {
   const map = new Map(baseIssues.map((issue) => [issue.id, issue]));
@@ -28,6 +42,10 @@ const mergeIssuesById = (baseIssues, incomingIssues) => {
       ...issue,
       status: mergedStatus,
       worker: mergedWorker,
+          // Prefer backend reporter so stale local values don't hide records in My Reports.
+          reporter: normalizeReporterName(issue.reporter)
+            ? issue.reporter
+            : (existing?.reporter || issue.reporter),
       photos: issue.photos || existing?.photos || []
     });
   });
@@ -35,54 +53,8 @@ const mergeIssuesById = (baseIssues, incomingIssues) => {
   return Array.from(map.values()).sort((a, b) => b.id - a.id);
 };
 
-const seedIssues = [
-  {
-    id: 101,
-    title: 'AC leaking in Lab 3',
-    category: 'Plumbing',
-    priority: 'High',
-    location: 'Lab 3, Block A',
-    description: 'Water is dripping continuously from AC unit near workstation area.',
-    status: 'Pending',
-    reporter: 'Aman',
-    photos: []
-  },
-  {
-    id: 102,
-    title: 'Wi-Fi router dead',
-    category: 'IT',
-    priority: 'Medium',
-    location: 'Library 1st floor',
-    description: 'Router not powering on and network is unavailable in study section.',
-    status: 'Pending',
-    reporter: 'Priya',
-    photos: []
-  },
-  {
-    id: 103,
-    title: 'Street light not working',
-    category: 'Electrical',
-    priority: 'Medium',
-    location: 'Main pathway gate to canteen',
-    description: 'Pathway gets too dark after evening due to dead light.',
-    status: 'Assigned',
-    reporter: 'Ankit',
-    worker: 'Ramesh',
-    photos: []
-  },
-  {
-    id: 104,
-    title: 'Broken desk in Room 4',
-    category: 'Carpentry',
-    priority: 'Low',
-    location: 'Classroom 4',
-    description: 'One leg of desk is broken and unstable.',
-    status: 'Resolved',
-    reporter: 'Riya',
-    worker: 'Suresh',
-    photos: []
-  }
-];
+// Removed: Seed data no longer needed - fetching from backend instead
+const seedIssues = [];
 
 function App() {
   const [currentView, setCurrentView] = useState('user');
@@ -90,10 +62,10 @@ function App() {
   const [issues, setIssues] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : seedIssues;
+      return saved ? JSON.parse(saved) : [];
     } catch (error) {
       console.error('Failed to load issues from storage:', error);
-      return seedIssues;
+      return [];
     }
   });
 
@@ -101,25 +73,37 @@ function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(issues));
   }, [issues]);
 
+  const refreshIssuesFromBackend = async (replaceAll = false) => {
+    try {
+      const response = await fetch(apiUrl('/api/issues'));
+      const result = await response.json();
+      const incoming = Array.isArray(result.issues)
+        ? result.issues
+        : (Array.isArray(result.data) ? result.data : []);
+
+      if (result.success && incoming.length >= 0) {
+        // On first load, completely replace with backend data
+        if (replaceAll) {
+          setIssues(incoming);
+        } else {
+          setIssues((prev) => mergeIssuesById(prev, incoming));
+        }
+      }
+    } catch (error) {
+      console.error('Backend sync failed:', error);
+    }
+  };
+
   useEffect(() => {
     if (!authUser) {
       return;
     }
 
-    const syncIssuesFromBackend = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/issues');
-        const result = await response.json();
+    const timer = setTimeout(() => {
+      refreshIssuesFromBackend(true); // Force replace on auth change
+    }, 0);
 
-        if (result.success && Array.isArray(result.issues)) {
-          setIssues((prev) => mergeIssuesById(prev, result.issues));
-        }
-      } catch (error) {
-        console.error('Backend sync failed:', error);
-      }
-    };
-
-    syncIssuesFromBackend();
+    return () => clearTimeout(timer);
   }, [authUser, currentView]);
 
   const totalPending = useMemo(
@@ -132,6 +116,8 @@ function App() {
   const handleLogin = (user) => {
     setAuthUser(user);
     setCurrentView(user.role === 'admin' ? 'admin' : 'user');
+    // Force refresh from backend on login
+    setTimeout(() => refreshIssuesFromBackend(true), 100);
   };
 
   const handleLogout = () => {
@@ -162,6 +148,30 @@ function App() {
         ? { ...issue, status: 'Assigned', worker: workerName }
         : issue
     )));
+
+    fetch(apiUrl(`/api/issues/${issueId}/status`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Assigned', worker: workerName })
+    }).catch((error) => {
+      console.error('Failed to persist Assigned status:', error);
+    });
+  };
+
+  const handleStartWork = (issueId) => {
+    setIssues((prev) => prev.map((issue) => (
+      issue.id === issueId
+        ? { ...issue, status: 'In Progress' }
+        : issue
+    )));
+
+    fetch(apiUrl(`/api/issues/${issueId}/status`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'In Progress' })
+    }).catch((error) => {
+      console.error('Failed to persist In Progress status:', error);
+    });
   };
 
   const handleResolveIssue = (issueId) => {
@@ -170,6 +180,14 @@ function App() {
         ? { ...issue, status: 'Resolved' }
         : issue
     )));
+
+    fetch(apiUrl(`/api/issues/${issueId}/status`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Resolved' })
+    }).catch((error) => {
+      console.error('Failed to persist Resolved status:', error);
+    });
   };
 
   const handleReopenIssue = (issueId) => {
@@ -178,6 +196,33 @@ function App() {
         ? { ...issue, status: 'Pending', worker: undefined }
         : issue
     )));
+
+    fetch(apiUrl(`/api/issues/${issueId}/status`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Pending', worker: '' })
+    }).catch((error) => {
+      console.error('Failed to persist Pending status:', error);
+    });
+  };
+
+  const handleDeleteIssue = (issueId) => {
+    if (!window.confirm('Are you sure you want to delete this issue? This cannot be undone.')) {
+      return;
+    }
+
+    // Remove from local state immediately
+    setIssues((prev) => prev.filter((issue) => issue.id !== issueId));
+
+    // Delete from backend
+    fetch(apiUrl(`/api/issues/${issueId}`), {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    }).catch((error) => {
+      console.error('Failed to delete issue:', error);
+      // Refresh to restore if deletion failed
+      refreshIssuesFromBackend(true);
+    });
   };
 
   return (
@@ -212,8 +257,8 @@ function App() {
               onClick={() => setCurrentView('user')}
               className={`nav-btn ${currentView === 'user' ? 'active' : ''}`}
             >
-              <span className="nav-icon">+</span>
-              <span>Report</span>
+              <span className="nav-icon">📝</span>
+              <span className="nav-label">Report</span>
             </button>
           ) : null}
 
@@ -222,8 +267,8 @@ function App() {
               onClick={() => setCurrentView('tracker')}
               className={`nav-btn ${currentView === 'tracker' ? 'active' : ''}`}
             >
-              <span className="nav-icon">O</span>
-              <span>Track</span>
+              <span className="nav-icon">🔍</span>
+              <span className="nav-label">My Reports</span>
             </button>
           ) : null}
 
@@ -232,8 +277,18 @@ function App() {
               onClick={() => setCurrentView('admin')}
               className={`nav-btn ${currentView === 'admin' ? 'active' : ''}`}
             >
-              <span className="nav-icon">#</span>
-              <span>Admin ({totalPending})</span>
+              <span className="nav-icon">⚙️</span>
+              <span className="nav-label">Manage ({totalPending})</span>
+            </button>
+          ) : null}
+
+          {isAdmin ? (
+            <button
+              onClick={() => setCurrentView('analytics')}
+              className={`nav-btn ${currentView === 'analytics' ? 'active' : ''}`}
+            >
+              <span className="nav-icon">📊</span>
+              <span className="nav-label">Analytics</span>
             </button>
           ) : null}
         </nav>
@@ -243,23 +298,39 @@ function App() {
         ) : null}
 
         {currentView === 'tracker' && !isAdmin ? (
-          <IssueTracker issues={issues} reporter={authUser.name || DEFAULT_REPORTER} />
+          <IssueTracker 
+            issues={issues} 
+            reporter={authUser.name || DEFAULT_REPORTER} 
+            onRefresh={refreshIssuesFromBackend}
+            onDeleteIssue={handleDeleteIssue}
+          />
         ) : null}
 
         {currentView === 'admin' ? (
           <AdminDashboard
             issues={issues}
             onAssignIssue={handleAssignIssue}
+            onStartWork={handleStartWork}
             onResolveIssue={handleResolveIssue}
             onReopenIssue={handleReopenIssue}
+            onDeleteIssue={handleDeleteIssue}
+            onRefresh={refreshIssuesFromBackend}
           />
+        ) : null}
+
+        {currentView === 'analytics' ? (
+          <AnalyticsDashboard issues={issues} />
         ) : null}
       </main>
       ) : null}
 
       <div className="bg-orb orb-1" aria-hidden="true" />
       <div className="bg-orb orb-2" aria-hidden="true" />
-      <div className="bg-grid" aria-hidden="true" />
+      <div className="bg-orb orb-3" aria-hidden="true" />
+
+      <footer className="app-global-footer">
+        &copy; 2026 <strong>Smart Resolve</strong> | Built by <strong>Armaan Goswami</strong>
+      </footer>
     </div>
   );
 }

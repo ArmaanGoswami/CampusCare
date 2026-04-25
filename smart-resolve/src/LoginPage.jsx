@@ -1,96 +1,104 @@
 import React, { useState } from 'react';
 
 const LoginPage = ({ onLogin }) => {
-  const [activeTab, setActiveTab] = useState('user');
-  const [form, setForm] = useState({
-    name: '',
-    password: ''
-  });
+  const [role, setRole] = useState('user');
+  const [form, setForm] = useState({ name: '', password: '' });
   const [error, setError] = useState('');
 
-  const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
+  const handleChange = (e) => setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setError('');
-
-    if (activeTab === 'admin') {
-      if (form.name.trim().toLowerCase() === 'admin' && form.password === 'admin123') {
-        onLogin({ role: 'admin', name: 'Admin' });
-        return;
-      }
-      setError('Invalid admin credentials. Demo: admin / admin123');
-      return;
-    }
-
-    if (!form.name.trim() || !form.password.trim()) {
-      setError('Please enter username and password.');
-      return;
-    }
-
-    onLogin({ role: 'user', name: form.name.trim() });
+    onLogin({ role, name: form.name.trim() || (role === 'admin' ? 'Admin' : 'User') });
   };
 
   return (
-    <div className="login-shell fade-slide-in">
-      <div className="login-card">
-        <div className="login-header">
-          <h2>Welcome to Smart Resolve</h2>
-          <p>Login as User or Admin to continue.</p>
+    <div className="login-container">
+      {/* Background Image */}
+      <div className="login-background">
+        <div className="login-overlay"></div>
+      </div>
+
+      {/* Login Card with Curved Shape */}
+      <div className="login-curved-card">
+        {/* Header Section */}
+        <div className="login-header-section">
+          <div className="login-logo-group">
+            <div className="login-logo-mark">SR</div>
+            <div className="login-logo-text">
+              <h1>Smart Resolve</h1>
+              <p>Campus Complaint System</p>
+            </div>
+          </div>
         </div>
 
-        <div className="login-tabs">
-          <button
-            type="button"
-            className={`login-tab ${activeTab === 'user' ? 'active' : ''}`}
-            onClick={() => setActiveTab('user')}
-          >
-            User Login
-          </button>
-          <button
-            type="button"
-            className={`login-tab ${activeTab === 'admin' ? 'active' : ''}`}
-            onClick={() => setActiveTab('admin')}
-          >
-            Admin Login
-          </button>
+        {/* Form Section */}
+        <div className="login-form-wrapper">
+          <h2 className="login-title">Login</h2>
+
+          {/* Role Tabs */}
+          <div className="login-tabs">
+            <button
+              type="button"
+              className={`login-tab ${role === 'user' ? 'active' : ''}`}
+              onClick={() => setRole('user')}
+            >
+              Student
+            </button>
+            <button
+              type="button"
+              className={`login-tab ${role === 'admin' ? 'active' : ''}`}
+              onClick={() => setRole('admin')}
+            >
+              Admin
+            </button>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="login-form" noValidate>
+            <div className="form-row">
+              <input
+                id="name"
+                name="name"
+                type="text"
+                value={form.name}
+                onChange={handleChange}
+                placeholder={role === 'admin' ? 'Admin Code' : 'Roll / Enrollment No'}
+                autoComplete="username"
+                required
+              />
+            </div>
+
+            <div className="form-row">
+              <input
+                id="password"
+                name="password"
+                type="password"
+                value={form.password}
+                onChange={handleChange}
+                placeholder="Password"
+                autoComplete="current-password"
+                required
+              />
+            </div>
+
+            {error && <p className="login-error">{error}</p>}
+
+            <button type="submit" className="login-submit-btn">
+              LOGIN
+            </button>
+
+            <p className="login-forgot">
+              Forgot Password?
+            </p>
+          </form>
+
+          {/* Footer */}
+          <p className="login-footer">
+            Powered By - <strong>Smart Resolve</strong>
+          </p>
         </div>
-
-        <form onSubmit={handleSubmit} className="login-form">
-          <div className="form-row">
-            <label htmlFor="name">{activeTab === 'admin' ? 'Admin Username' : 'Username'}</label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              value={form.name}
-              onChange={handleChange}
-              placeholder={activeTab === 'admin' ? 'admin' : 'Enter your name'}
-              required
-            />
-          </div>
-
-          <div className="form-row">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              value={form.password}
-              onChange={handleChange}
-              placeholder={activeTab === 'admin' ? 'admin123' : 'Enter password'}
-              required
-            />
-          </div>
-
-          {error ? <p className="login-error">{error}</p> : null}
-
-          <button type="submit" className="primary-btn login-btn">
-            {activeTab === 'admin' ? 'Login as Admin' : 'Login as User'}
-          </button>
-        </form>
       </div>
     </div>
   );

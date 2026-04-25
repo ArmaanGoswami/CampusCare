@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiUrl } from './config/api';
 
 const ReportIssue = ({ reporter, onCreateIssue }) => {
   const MAX_PHOTOS = 4;
@@ -8,8 +9,7 @@ const ReportIssue = ({ reporter, onCreateIssue }) => {
     category: 'IT',
     priority: 'Medium',
     location: '',
-    description: '',
-    reporter: currentReporter
+    description: ''
   });
   const [photos, setPhotos] = useState([]);
   const [submitted, setSubmitted] = useState(false);
@@ -23,36 +23,43 @@ const ReportIssue = ({ reporter, onCreateIssue }) => {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
-
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
 
     const payload = {
       ...formData,
+      reporter: currentReporter,
       photos: photos.map((photo) => photo.file.name)
     };
 
     try {
-      const response = await fetch('http://localhost:5000/api/report', {
+      console.log('[ReportIssue] Submitting payload:', payload);
+      
+      // Send to Flask backend
+      const response = await fetch(apiUrl('/api/report'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
+      console.log('[ReportIssue] Response status:', response.status);
+      
       const result = await response.json();
+      console.log('[ReportIssue] Server response:', result);
 
-      if (result.success) {
-        onCreateIssue({ ...payload, id: result.issue_id });
-        alert(`Awesome! Issue #${result.issue_id} reported. (Backend says: ${result.message})`);
-      } else {
-        alert('Oops! Python backend returned an error.');
+      if (!result.success) {
+        alert('Server error: ' + (result.message || 'Unknown error'));
         return;
       }
+
+      console.log('[ReportIssue] Issue created with ID:', result.issue_id);
+      
+      onCreateIssue({ ...payload, id: result.issue_id || Date.now(), status: 'Pending' });
+      alert(`Complaint #${result.issue_id} submitted successfully! 🚀\nStatus: Pending`);
+
     } catch (error) {
-      console.error('Error connecting to backend:', error);
-      alert('Backend se connect nahi ho paya. Kya app.py chal raha hai?');
+      console.error('[ReportIssue] Error submitting complaint:', error);
+      alert('Failed to connect to the server. Is the backend running?');
       return;
     }
 
@@ -93,6 +100,8 @@ const ReportIssue = ({ reporter, onCreateIssue }) => {
 
   const charsUsed = formData.description.length;
   const maxChars = 240;
+
+
 
   return (
     <div className="screen-wrap report-screen">
@@ -181,6 +190,7 @@ const ReportIssue = ({ reporter, onCreateIssue }) => {
               required
               rows="5"
             />
+
           </div>
 
           <div className="form-row">
@@ -218,7 +228,7 @@ const ReportIssue = ({ reporter, onCreateIssue }) => {
           </div>
 
           <div className="form-footer">
-            <p>Reporter: <strong>{formData.reporter}</strong></p>
+            <p>Reporter: <strong>{currentReporter}</strong></p>
             <button type="submit" className="primary-btn">Submit Report</button>
           </div>
         </form>

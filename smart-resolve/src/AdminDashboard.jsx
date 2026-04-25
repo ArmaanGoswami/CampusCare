@@ -1,8 +1,42 @@
 import React, { useState } from 'react';
+import { apiUrl } from './config/api';
 
-const AdminDashboard = ({ issues, onAssignIssue, onResolveIssue, onReopenIssue }) => {
+const AdminDashboard = ({ issues, onAssignIssue, onResolveIssue, onReopenIssue, onStartWork, onDeleteIssue, onRefresh }) => {
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [refreshing, setRefreshing] = useState(false);
+  const [assigningId, setAssigningId] = useState(null);
+  const [workerInput, setWorkerInput] = useState('');
+  const [exporting, setExporting] = useState(false);
+
+  const handleRefresh = async () => {
+    if (!onRefresh) {
+      return;
+    }
+
+    setRefreshing(true);
+    await onRefresh();
+    setRefreshing(false);
+  };
+
+  const handleExportCSV = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch(apiUrl('/api/export/csv'));
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `issues_export_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export CSV:', error);
+      alert('Failed to export CSV');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const categoryWithEmoji = {
     Plumbing: '🚰 Plumbing',
@@ -17,10 +51,17 @@ const AdminDashboard = ({ issues, onAssignIssue, onResolveIssue, onReopenIssue }
     Low: '#60a5fa'
   };
 
-  const handleAssign = (issueId) => {
-    const workerName = window.prompt("Assign to which worker?");
-    if (workerName && workerName.trim()) {
-      onAssignIssue(issueId, workerName.trim());
+  const handleAssignSubmit = (issueId) => {
+    const name = workerInput.trim();
+    if (!name) return;
+    onAssignIssue(issueId, name);
+    setAssigningId(null);
+    setWorkerInput('');
+  };
+
+  const handleStartWork = (issueId) => {
+    if (onStartWork) {
+      onStartWork(issueId);
     }
   };
 
@@ -41,18 +82,21 @@ const AdminDashboard = ({ issues, onAssignIssue, onResolveIssue, onReopenIssue }
 
   const pendingIssues = filtered.filter((issue) => issue.status === "Pending");
   const assignedIssues = filtered.filter((issue) => issue.status === "Assigned");
+  const inProgressIssues = filtered.filter((issue) => issue.status === "In Progress");
   const resolvedIssues = filtered.filter((issue) => issue.status === "Resolved");
   const categories = ['All', ...new Set(issues.map((issue) => issue.category))];
 
   const cards = [
     { label: 'Total Tickets', value: issues.length, tone: 'blue' },
     { label: 'Awaiting Action', value: pendingIssues.length, tone: 'amber' },
-    { label: 'In Progress', value: assignedIssues.length, tone: 'cyan' },
+    { label: 'Assigned', value: assignedIssues.length, tone: 'cyan' },
+    { label: 'In Progress', value: inProgressIssues.length, tone: 'purple' },
     { label: 'Completed', value: resolvedIssues.length, tone: 'green' }
   ];
 
   const IssueCard = ({ issue, index }) => {
     const borderColor = priorityColor[issue.priority] || '#f3f4f6';
+    const isAssigning = assigningId === issue.id;
 
     return (
       <article className="admin-issue-card fade-rise" style={{ animationDelay: `${index * 60}ms`, borderLeftColor: borderColor }}>
@@ -87,18 +131,46 @@ const AdminDashboard = ({ issues, onAssignIssue, onResolveIssue, onReopenIssue }
           <p className="admin-issue-photos">{issue.photos.length} photo(s) attached</p>
         ) : null}
 
-        {issue.status === 'Pending' ? (
+        {issue.status === 'Pending' && !isAssigning ? (
           <button
-            onClick={() => handleAssign(issue.id)}
+            onClick={() => { setAssigningId(issue.id); setWorkerInput(''); }}
             className="admin-action-btn assign"
           >
             Assign Worker +
           </button>
         ) : null}
 
+        {issue.status === 'Pending' && isAssigning ? (
+          <div className="assign-inline-form">
+            <input
+              type="text"
+              placeholder="Worker name..."
+              value={workerInput}
+              onChange={(e) => setWorkerInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAssignSubmit(issue.id); }}
+              className="assign-inline-input"
+              autoFocus
+            />
+            <div className="assign-inline-actions">
+              <button onClick={() => handleAssignSubmit(issue.id)} className="admin-action-btn assign" disabled={!workerInput.trim()}>
+                ✓ Assign
+              </button>
+              <button onClick={() => { setAssigningId(null); setWorkerInput(''); }} className="admin-action-btn reopen">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {issue.status === 'Assigned' ? (
+          <button onClick={() => handleStartWork(issue.id)} className="admin-action-btn progress">
+            🔧 Start Work
+          </button>
+        ) : null}
+
+        {issue.status === 'In Progress' ? (
           <button onClick={() => onResolveIssue(issue.id)} className="admin-action-btn resolve">
-            Mark Resolved
+            ✅ Mark Resolved
           </button>
         ) : null}
 
@@ -107,6 +179,14 @@ const AdminDashboard = ({ issues, onAssignIssue, onResolveIssue, onReopenIssue }
             Reopen
           </button>
         ) : null}
+
+        <button 
+          onClick={() => onDeleteIssue(issue.id)} 
+          className="admin-action-btn delete"
+          title="Delete this issue"
+        >
+          🗑️ Delete
+        </button>
 
       </article>
     );
@@ -135,13 +215,21 @@ const AdminDashboard = ({ issues, onAssignIssue, onResolveIssue, onReopenIssue }
   return (
     <div className="screen-wrap admin-screen">
       <div className="screen-head">
-        <div className="admin-head-row">
-          <h2>Admin Workspace</h2>
-          <span className="admin-version-pill">
-            UI v2 LIVE
-          </span>
+        <div className="screen-head-row">
+          <div>
+            <div className="admin-head-row">
+              <h2>Admin Workspace</h2>
+              <span className="admin-version-pill">Live</span>
+            </div>
+            <p>Manage and resolve campus complaints</p>
+          </div>
+          <button type="button" className="primary-btn" onClick={handleRefresh} disabled={refreshing}>
+            {refreshing ? '⏳ Refreshing…' : '🔄 Refresh'}
+          </button>
+          <button type="button" className="primary-btn" onClick={handleExportCSV} disabled={exporting}>
+            {exporting ? '⏳ Exporting…' : '📥 Export CSV'}
+          </button>
         </div>
-        <p>Manage and assign campus issues efficiently</p>
       </div>
 
       <section className="admin-toolbar">
@@ -177,7 +265,8 @@ const AdminDashboard = ({ issues, onAssignIssue, onResolveIssue, onReopenIssue }
 
       <section className="admin-board-grid">
         {renderColumn('To Do', pendingIssues.length, 'amber', pendingIssues, 'No pending tickets.')}
-        {renderColumn('In Progress', assignedIssues.length, 'blue', assignedIssues, 'No active assignments.')}
+        {renderColumn('Assigned', assignedIssues.length, 'cyan', assignedIssues, 'No assigned tickets.')}
+        {renderColumn('In Progress', inProgressIssues.length, 'purple', inProgressIssues, 'No tickets in progress.')}
         {renderColumn('Completed', resolvedIssues.length, 'green', resolvedIssues, 'No completed tickets yet.')}
       </section>
     </div>
