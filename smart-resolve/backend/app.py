@@ -1,11 +1,12 @@
 # Developed by Armaan Goswami - Smart Resolve Backend
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import mysql.connector
 import os
 import requests
 import certifi
 import sqlite3
+import uuid
 from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
 from datetime import datetime
@@ -38,6 +39,10 @@ TIDB_PASSWORD = os.getenv("TIDB_PASSWORD", "").strip()
 # Flip back to True once a valid TIDB_PASSWORD is available.
 USE_TIDB = False
 SQLITE_DB_PATH = os.path.join(os.path.dirname(__file__), "smart_resolve.db")
+UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+
+# Create uploads directory if it doesn't exist
+os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 
 def init_sqlite_db():
@@ -78,6 +83,18 @@ def init_sqlite_db():
             author TEXT NOT NULL,
             message TEXT NOT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (issue_id) REFERENCES Issues (issue_id) ON DELETE CASCADE
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS Photos (
+            photo_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            issue_id INTEGER NOT NULL,
+            file_name TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (issue_id) REFERENCES Issues (issue_id) ON DELETE CASCADE
         )
         """
@@ -198,16 +215,16 @@ def report_issue():
     try:
         print(f"\n📬 [API] POST /api/report - Received complaint", flush=True)
         
-        # Data incoming from React Frontend
-        data = request.json
+        # Get form data from multipart/form-data request
+        title = request.form.get('title')
+        category = request.form.get('category')
+        priority = request.form.get('priority')
+        location = request.form.get('location')
+        description = request.form.get('description')
+        reporter_name = (request.form.get('reporter') or 'Armaan').strip()
         
-        title = data.get('title')
-        category = data.get('category')
-        priority = data.get('priority')
-        location = data.get('location')
-        description = data.get('description')
-        
-        print(f"📝 [API] Title: {title}, Category: {category}, Reporter: {data.get('reporter')}", flush=True)
+        print(f"📝 [API] Title: {title}, Category: {category}, Reporter: {reporter_name}", flush=True)
+        print(f"📸 [API] Photos received: {len(request.files.getlist('photos'))}", flush=True)
         
         # Open connection to database
         db = get_db_connection()
@@ -216,7 +233,6 @@ def report_issue():
         placeholder = "%s" if USE_TIDB else "?"
 
         # Resolve reporter user_id from Users table; auto-create if not found.
-        reporter_name = (data.get('reporter') or 'Armaan').strip()
         cursor.execute(
             f"SELECT user_id FROM Users WHERE LOWER(name) = LOWER({placeholder}) LIMIT 1",
             (reporter_name,)
@@ -251,20 +267,64 @@ def report_issue():
         new_issue_id = cursor.lastrowid
         print(f"✅ [DB] Issue #{new_issue_id} saved to database", flush=True)
         
-        # Close connection
+        # 📸 Handle photo uploads
+        uploaded_photos = []
+        files = request.files.getlist('photos')
+        if files:
+            print(f"📸 [API] Processing {len(files)} photos for issue #{new_issue_id}", flush=True)
+            
+            for file in files:
+                if file and file.filename and file.filename.strip():
+                    try:
+                        # Save file with issue_id prefix for organization
+                        import uuid
+                        unique_suffix = str(uuid.uuid4())[:8]
+                        original_name = file.filename
+                        file_ext = os.path.splitext(original_name)[1]
+                        saved_filename = f"issue_{new_issue_id}_{unique_suffix}{file_ext}"
+                        file_path = os.path.join(UPLOADS_DIR, saved_filename)
+                        
+                        # Save the file
+                        file.save(file_path)
+                        print(f"✅ [API] Photo saved: {saved_filename}", flush=True)
+                        
+                        # Store photo reference in database
+                        cursor.execute(
+                            f"INSERT INTO Photos (issue_id, file_name, file_path) VALUES ({placeholder}, {placeholder}, {placeholder})",
+                            (new_issue_id, original_name, saved_filename)
+                        )
+                        db.commit()
+                        uploaded_photos.append(saved_filename)
+                        
+                    except Exception as photo_error:
+                        print(f"❌ [API] Error saving photo: {photo_error}", flush=True)
+        
         cursor.close()
         db.close()
+        
+        print(f"📸 [API] Total photos uploaded: {len(uploaded_photos)}", flush=True)
 
         # 🔥 Sync to Google Sheets automatically
         print(f"🔥 [API] Now syncing to Google Sheets...", flush=True)
-        sheets_sync_success = append_to_google_sheets(data)
+        # Create data dict for sheets sync
+        data_for_sheets = {
+            'title': title,
+            'category': category,
+            'priority': priority,
+            'location': location,
+            'description': description,
+            'reporter': reporter_name,
+            'photos_count': len(uploaded_photos)
+        }
+        sheets_sync_success = append_to_google_sheets(data_for_sheets)
         print(f"📊 [API] Google Sheets sync result: {'SUCCESS' if sheets_sync_success else 'FAILED'}", flush=True)
 
         # Send success message back to React
         return jsonify({
             "success": True, 
-            "message": "Data saved successfully!", 
+            "message": "Data and photos saved successfully!", 
             "issue_id": new_issue_id,
+            "photos_uploaded": len(uploaded_photos),
             "sheets_synced": sheets_sync_success
         }), 201
 
@@ -302,7 +362,22 @@ def get_all_issues():
         if not USE_TIDB:
             issues_data = [dict(row) for row in issues_data]
 
-        cursor.close()
+        # Fetch photos for each issue - with absolute URLs
+        placeholder = "%s" if USE_TIDB else "?"
+        for issue in issues_data:
+            cursor = db.cursor(dictionary=True) if USE_TIDB else db.cursor()
+            cursor.execute(
+                f"SELECT file_name, file_path FROM Photos WHERE issue_id = {placeholder} ORDER BY uploaded_at ASC",
+                (issue['id'],)
+            )
+            photos = cursor.fetchall()
+            if not USE_TIDB:
+                photos = [dict(row) for row in photos]
+            # Add photos with absolute URLs pointing to backend server
+            base_url = request.host_url.rstrip('/')
+            issue['photos'] = [f"{base_url}/uploads/{photo['file_path']}" for photo in photos]
+            cursor.close()
+
         db.close()
 
         return jsonify({"success": True, "data": issues_data}), 200
@@ -310,6 +385,56 @@ def get_all_issues():
     except Exception as e:
         print("❌ Error fetching issues:", e)
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+# ==========================================
+# API: Get Photos for an Issue
+# ==========================================
+@app.route('/api/issues/<int:issue_id>/photos', methods=['GET'])
+def get_issue_photos(issue_id):
+    try:
+        db = get_db_connection()
+        if USE_TIDB:
+            cursor = db.cursor(dictionary=True)
+        else:
+            cursor = db.cursor()
+
+        placeholder = "%s" if USE_TIDB else "?"
+        query = f"SELECT photo_id, file_name, file_path, uploaded_at FROM Photos WHERE issue_id = {placeholder} ORDER BY uploaded_at ASC"
+        cursor.execute(query, (issue_id,))
+        photos_data = cursor.fetchall()
+
+        if not USE_TIDB:
+            photos_data = [dict(row) for row in photos_data]
+
+        cursor.close()
+        db.close()
+
+        return jsonify({"success": True, "data": photos_data}), 200
+
+    except Exception as e:
+        print(f"❌ Error fetching photos for issue {issue_id}:", e)
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# ==========================================
+# API: Serve Uploaded Files
+# ==========================================
+@app.route('/uploads/<filename>', methods=['GET', 'OPTIONS'])
+def get_upload(filename):
+    try:
+        # Security: prevent directory traversal attacks
+        if '..' in filename or '/' in filename or '\\' in filename:
+            return jsonify({"success": False, "message": "Invalid filename"}), 400
+        
+        response = send_from_directory(UPLOADS_DIR, filename)
+        # Ensure CORS headers are included
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        return response
+    except Exception as e:
+        print(f"❌ Error serving file {filename}:", e)
+        return jsonify({"success": False, "message": "File not found"}), 404
 
 
 @app.route('/api/issues/<int:issue_id>/status', methods=['PUT'])

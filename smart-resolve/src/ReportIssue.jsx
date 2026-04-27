@@ -26,20 +26,27 @@ const ReportIssue = ({ reporter, onCreateIssue }) => {
 const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const payload = {
-      ...formData,
-      reporter: currentReporter,
-      photos: photos.map((photo) => photo.file.name)
-    };
+    // Use FormData to send files along with form data
+    const formDataToSend = new FormData();
+    formDataToSend.append('title', formData.title);
+    formDataToSend.append('category', formData.category);
+    formDataToSend.append('priority', formData.priority);
+    formDataToSend.append('location', formData.location);
+    formDataToSend.append('description', formData.description);
+    formDataToSend.append('reporter', currentReporter);
+    
+    // Append all photo files
+    photos.forEach((photo, index) => {
+      formDataToSend.append('photos', photo.file);
+    });
 
     try {
-      console.log('[ReportIssue] Submitting payload:', payload);
+      console.log('[ReportIssue] Submitting form with', photos.length, 'photos');
       
-      // Send to Flask backend
+      // Send to Flask backend - don't set Content-Type header, let browser set it automatically
       const response = await fetch(apiUrl('/api/report'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: formDataToSend
       });
 
       console.log('[ReportIssue] Response status:', response.status);
@@ -54,6 +61,7 @@ const handleSubmit = async (e) => {
 
       console.log('[ReportIssue] Issue created with ID:', result.issue_id);
       
+      const payload = { ...formData, reporter: currentReporter };
       onCreateIssue({ ...payload, id: result.issue_id || Date.now(), status: 'Pending' });
       alert(`Complaint #${result.issue_id} submitted successfully! 🚀\nStatus: Pending`);
 

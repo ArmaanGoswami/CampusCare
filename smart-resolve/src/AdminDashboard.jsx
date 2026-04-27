@@ -128,7 +128,23 @@ const AdminDashboard = ({ issues, onAssignIssue, onResolveIssue, onReopenIssue, 
         </div>
 
         {issue.photos?.length ? (
-          <p className="admin-issue-photos">{issue.photos.length} photo(s) attached</p>
+          <div className="admin-issue-photos">
+            <p><strong>📸 {issue.photos.length} photo(s) attached:</strong></p>
+            <div className="photo-gallery-admin">
+              {issue.photos.map((photoUrl, idx) => (
+                <a 
+                  key={idx} 
+                  href={photoUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="photo-thumbnail-admin"
+                  title="Click to view full size"
+                >
+                  <img src={photoUrl} alt={`Issue photo ${idx + 1}`} />
+                </a>
+              ))}
+            </div>
+          </div>
         ) : null}
 
         {issue.status === 'Pending' && !isAssigning ? (
