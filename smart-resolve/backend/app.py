@@ -11,6 +11,10 @@ from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Setup logging to file
 LOG_FILE = os.path.join(os.path.dirname(__file__), "sheets_debug.log")
@@ -28,7 +32,11 @@ app = Flask(__name__)
 CORS(app) # To connect React (Port 5173) to Flask (Port 5000)
 
 # Google Sheets Configuration
-SHEETS_CREDS_FILE = os.path.join(os.path.dirname(__file__), "credentials.json")
+# Support multiple credentials: use GOOGLE_CREDENTIALS_FILE env var if set, otherwise use default
+SHEETS_CREDS_FILE = os.getenv(
+    "GOOGLE_CREDENTIALS_FILE",
+    os.path.join(os.path.dirname(__file__), "credentials.json")
+)
 SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "1F-Kp2sQQWRhJfSlBdeVb75D2vqjmlV1TZ931IfTQk-A")
 
 HF_API_URL = "https://router.huggingface.co/hf-inference/models/facebook/bart-large-mnli"

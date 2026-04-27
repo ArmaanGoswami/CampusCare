@@ -2,5 +2,10 @@ node_modules/
 dist/ 
 build/ 
 
-smart-resolve/backend/credentials.json
+# Credentials and sensitive files
+smart-resolve/backend/credentials*.json
+smart-resolve/backend/.env
 smart-resolve/backend/__pycache__/
+smart-resolve/backend/uploads/
+smart-resolve/backend/*.db
+smart-resolve/backend/sheets_debug.log
